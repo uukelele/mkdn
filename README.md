@@ -19,6 +19,7 @@ $ pip install -e . -U
 $ mkdn /path/to/file.md
 $ mkdn README.md
 $ cat README.md | mkdn
+$ # Try viewing this README in mkdn!
 $ curl 'https://raw.githubusercontent.com/uukelele/mkdn/refs/heads/main/README.md' -s | mkdn
 ```
 
@@ -44,6 +45,10 @@ Here are some features that mkdn has:
   - You can pass an image, either a file path or URL, and mkdn renders the image using the terminal's image protocol if it has one.
 - Font sizing for headings
   - Instead of just changing their colour, headings like `#` and `##` have different font sizes. Just like real markdown.
+- Supports tables
+  - And table alignment.
+  - Because tables are a commonly used feature by LLMs. It is essential to include it.
+
 
 ## Screenshots
 

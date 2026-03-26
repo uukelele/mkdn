@@ -8,6 +8,9 @@ from pygments.formatters import Terminal256Formatter
 
 from texicode.pipeline import render_tex
 
+import unicodedata
+from emoji import replace_emoji
+
 from shutil import get_terminal_size
 import os
 import re
@@ -27,7 +30,13 @@ md = MarkdownIt(
         'linkify': True,
         'breaks': True,
     }
-).enable('strikethrough').use(tasklists_plugin, enabled=True)
+).enable(
+    'strikethrough'
+).enable(
+    'table'
+).use(
+    tasklists_plugin, enabled=True
+)
 
 _heading_scale = None
 
@@ -35,6 +44,13 @@ _blockquote_open = 0
 _list_open = []
 _image_cache = {}
 _has_rendered_blockquote = ContextVar('_h_r_b', default=False)
+
+_in_table = []
+_table = []
+_row = []
+_cell = ''
+_align = []
+_depth = 0
 
 width, height = get_terminal_size()
 
@@ -89,6 +105,105 @@ async def preload_images(tokens: list[Token]):
         if tasks:
             await asyncio.gather(*tasks)
 
+def visible_length(text):
+    text = re.sub(r'\x1B\][0-9;]*[^\a\x1b]*\a', '', text)
+    text = re.sub(r'\x1B\][0-9;]*[^\a\x1b]*\x1B\\', '', text)
+    text = re.sub(r'\x1B_[^\x1b]*\x1B\\', '', text)
+    text = re.sub(r'\x1B\[[0-9;]*[a-zA-Z]', '', text)
+
+    text = replace_emoji(text, replace='XX')
+
+    width = 0
+    for char in text:
+        if unicodedata.east_asian_width(char) in ('W', 'F'):
+            width += 2
+        else:
+            width += 1
+
+    return len(text)
+
+def draw_table(table_data, alignments):
+    if not table_data: return ''
+
+    table_data = [[cell.replace('\n', ' ') for cell in row] for row in table_data]
+
+    cols = max((len(row) for row in table_data), default=0)
+    if cols == 0: return ''
+    widths = [0] * cols
+
+    for row in table_data:
+        for i, cell in enumerate(row):
+            widths[i] = max(widths[i], visible_length(cell))
+    
+    def pad(text, width, align):
+        total = width - visible_length(text)
+        if total <= 0: return text
+
+        match align:
+            case 'center':
+                left = total // 2
+                return (' ' * left) + text + (' ' * (total - left))
+            case 'right':
+                return (' ' * total) + text
+            case 'left' | _:
+                return text + (' ' * total)
+            
+    lines = []
+
+    from enum import Enum
+    class Direction(Enum):
+        TOP    = ' │ '
+        CENTER = '─'
+        BOTTOM = 2
+        LEFT   = '│ '
+        RIGHT  = ' │'
+
+        def __truediv__(self, other):
+            if isinstance(other, Direction):
+                return map[(self, other)][0]
+            return NotImplemented
+        
+        def __mul__(self, other): return self.value * other
+        def __str__(self): return self.value
+        def __add__(self, other): return self.value + other
+        def __radd__(self, other): return other + self.value
+
+    d = Direction
+
+    map = {
+        (d.TOP,    d.LEFT)   : ['┌', '┍', '┎', '┏'],
+        (d.TOP,    d.CENTER) : ['┬', '┭', '┮', '┯', '┰', '┱', '┲', '┳'],
+        (d.TOP,    d.RIGHT)  : ['┐', '┑', '┒', '┓'],
+        (d.CENTER, d.LEFT)   : ['├', '┝', '┞', '┟', '┠', '┡', '┢', '┣'],
+        (d.CENTER, d.CENTER) : ['┼', '┽', '┾', '┿', '╀', '╁', '╂', '╃', '╄', '╅', '╆', '╇', '╈', '╉', '╊', '╋'],
+        (d.CENTER, d.RIGHT)  : ['┤', '┥', '┦', '┧', '┨', '┩', '┪', '┫'],
+        (d.BOTTOM, d.LEFT)   : ['└', '┕', '┖', '┗'],
+        (d.BOTTOM, d.CENTER) : ['┴', '┵', '┶', '┷', '┸', '┹', '┺', '┻'],
+        (d.BOTTOM, d.RIGHT)  : ['┘', '┙', '┚', '┛'],
+    }
+
+    top = (d.TOP / d.LEFT) + (d.TOP / d.CENTER).join(d.CENTER * (w + 2) for w in widths) + (d.TOP / d.RIGHT)
+    lines.append(top)
+
+    for i, row in enumerate(table_data):
+        while len(row) < cols: row.append('')
+
+        cells = [
+            pad(cell, widths[j], alignments[j] if j < len(alignments) else 'left')
+            for j, cell in enumerate(row)
+        ]
+
+        lines.append(d.LEFT + str(d.TOP).join(cells) + d.RIGHT)
+
+        if i == 0 and len(table_data) > 1:
+            lines.append((d.CENTER / d.LEFT) + (d.CENTER / d.CENTER).join(d.CENTER * (w + 2) for w in widths) + (d.CENTER / d.RIGHT))
+
+    lines.append((d.BOTTOM / d.LEFT) + (d.BOTTOM / d.CENTER).join(d.CENTER * (w + 2) for w in widths) + (d.BOTTOM / d.RIGHT))
+
+    bc = (d.LEFT * _blockquote_open)
+    return '\n' + '\n'.join(bc + line for line in lines) + '\n\n'
+
+
 def highlight_code(code: str, lang: str | None = None):
     try:
         lexer = get_lexer_by_name(lang) if lang else guess_lexer(code)
@@ -120,6 +235,60 @@ def process_markdown(content):
     return re.sub(latex_regex, replace_latex, content, flags=re.DOTALL)
 
 def render(token: Token):
+    global _depth, _in_table, _table, _row, _cell, _align
+
+    _depth += 1
+    try:
+        match token.type:
+            case 'table_open':
+                _in_table = True
+                _table = []
+                _align = []
+                return ''
+            
+            case 'table_close':
+                _in_table = False
+                return draw_table(_table, _align)
+            
+            case 'thead_open' | 'thead_close' | 'tbody_open' | 'tbody_close':
+                return ''
+            
+            case 'tr_open':
+                _row = []
+                return ''
+            
+            case 'th_open' | 'td_open':
+                _cell = ''
+                style = token.attrGet('style') or ''
+                align = 'left'
+                if   'center' in style: align = 'center'
+                elif 'right'  in style: align = 'right'
+
+                if token.type == 'th_open':
+                    _align.append(align)
+
+                return ''
+            
+            case 'th_close' | 'td_close':
+                _row.append(_cell)
+                return ''
+            
+            case 'tr_close':
+                _table.append(_row)
+                return ''
+            
+        out = _render(token)
+
+        if _in_table and _depth == 1:
+            _cell += out
+            return ''
+        
+        return out
+
+    finally:
+        _depth -= 1
+
+def _render(token: Token):
     global _heading_scale, _blockquote_open, _has_rendered_blockquote
 
     match token.type:
@@ -278,9 +447,11 @@ def render(token: Token):
     return render_text(token.content)
 
 def render_text(text):
+    global _in_table, _has_rendered_blockquote, _blockquote_open
+
     if not text: return ''
 
-    if not _has_rendered_blockquote.get(): text = ('│ ' * _blockquote_open) + text
+    if not _has_rendered_blockquote.get() and not _in_table: text = ('│ ' * _blockquote_open) + text
 
     if _heading_scale:
         return f'\033]66;{_heading_scale};{text}\a'

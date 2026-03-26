@@ -5,6 +5,7 @@ description = "CLI Markdown renderer for the terminal. With more features than t
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "emoji>=2.15.0",
     "httpx>=0.28.1",
     "linkify-it-py>=2.1.0",
     "markdown-it-py>=4.0.0",
