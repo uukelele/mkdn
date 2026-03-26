@@ -155,6 +155,8 @@ dependencies = [
     { name = "markdown-it-py" },
     { name = "mdit-py-plugins" },
     { name = "pillow" },
+    { name = "pygments" },
+    { name = "texicode" },
     { name = "typer" },
 ]
 
@@ -165,6 +167,8 @@ requires-dist = [
     { name = "markdown-it-py", specifier = ">=4.0.0" },
     { name = "mdit-py-plugins", specifier = ">=0.5.0" },
     { name = "pillow", specifier = ">=12.1.1" },
+    { name = "pygments", specifier = ">=2.19.2" },
+    { name = "texicode", git = "https://github.com/uukelele/TeXicode.git" },
     { name = "typer", specifier = ">=0.24.1" },
 ]
 
@@ -285,6 +289,11 @@ sdist = { url = "https://files.pythonhosted.org/packages/58/15/8b3609fd3830ef7b2
 wheels = [
     { url = "https://files.pythonhosted.org/packages/e0/f9/0595336914c5619e5f28a1fb793285925a8cd4b432c9da0a987836c7f822/shellingham-1.5.4-py2.py3-none-any.whl", hash = "sha256:7ecfff8f2fd72616f7481040475a65b2bf8af90a56c89140852d1120324e8686", size = 9755, upload-time = "2023-10-24T04:13:38.866Z" },
 ]
+
+[[package]]
+name = "texicode"
+version = "1.0.2"
+source = { git = "https://github.com/uukelele/TeXicode.git#443db203a9ca96d587018e07752f7335efed4a06" }
 
 [[package]]
 name = "typer"

@@ -1,8 +1,16 @@
 from markdown_it import MarkdownIt
 from markdown_it.token import Token
 from mdit_py_plugins.tasklists import tasklists_plugin
+
+from pygments import highlight
+from pygments.lexers import get_lexer_by_name, guess_lexer
+from pygments.formatters import Terminal256Formatter
+
+from texicode.pipeline import render_tex
+
 from shutil import get_terminal_size
 import os
+import re
 from pathlib import Path
 import base64
 import httpx
@@ -81,6 +89,36 @@ async def preload_images(tokens: list[Token]):
         if tasks:
             await asyncio.gather(*tasks)
 
+def highlight_code(code: str, lang: str | None = None):
+    try:
+        lexer = get_lexer_by_name(lang) if lang else guess_lexer(code)
+    except:
+        try:
+            lexer = guess_lexer(lexer)
+        except:
+            return code
+        
+    return highlight(code, lexer, Terminal256Formatter(style='monokai'))
+
+
+# https://github.com/dxddxx/TeXicode/blob/8d7ab0ff93f36f98669c34c78a38de63a44ce80f/src/main.py#L11-L26 | A bit modified
+def process_markdown(content):
+
+    inline_dollar = r'(?<!\$)\$(?!\$)([^\n$]+?)\$(?!\$)'
+    block_dollar = r'\$\$([\s\S]+?)\$\$|\\\[([\s\S]+?)\\\]|\\begin\{(.+?)\}([\s\S]+?)\\end\{\3\}'
+    latex_regex = f'{block_dollar}|{inline_dollar}'
+
+    def replace_latex(match):
+        tex_block = match.group(0)
+        clean_tex_block = tex_block.strip('$')
+        context = "md_inline"
+        if tex_block.startswith('$$') or tex_block.startswith(r'\[') \
+                or tex_block.startswith(r'\begin'):
+            context = "md_block"
+        return render_tex(clean_tex_block, False, False, context, {'fonts': 'normal'})
+
+    return re.sub(latex_regex, replace_latex, content, flags=re.DOTALL)
+
 def render(token: Token):
     global _heading_scale, _blockquote_open, _has_rendered_blockquote
 
@@ -103,11 +141,12 @@ def render(token: Token):
 
         case 'heading_close':
             _heading_scale = None
+            # return '\n\n\033[2m' + '─'*width + '\033[22m\n\n\n'
             return '\n\n'
         
         case 'paragraph_close':
             if _blockquote_open:
-                return (('│ ' * _blockquote_open) + '\n')
+                return ('\n' + ('│ ' * _blockquote_open) + '\n')
             return '\n\n'
         
         case 'hr':
@@ -186,7 +225,8 @@ def render(token: Token):
         
         case 'blockquote_close':
             _blockquote_open -= 1
-            return '\033[22m'
+            if _blockquote_open == 0:
+                return '\033[22m'
         
         case 'link_open':
             href = token.attrGet('href')
@@ -195,17 +235,31 @@ def render(token: Token):
         case 'link_close':
             return '\033]8;;\033\\\033[24m'
         
-        case 'softbreak':
+        case 'softbreak' | 'hardbreak':
             return '\n'
-        
+               
         case 'code_inline':
-            output = '\033[100m'
+            output = '\033[48;5;238m'
 
             if token.children:
                 output += ''.join([render(child) for child in token.children])
             else:
                 output += render_text(token.content)
             
+            return output + '\033[0m'
+        
+        case 'fence':
+            output = '\033[48;5;238m'
+
+            lang = token.info.strip().split()[0] if token.info else None
+
+            cont = token.content.splitlines()
+            # cont = [line+'\033[K' for line in cont]
+            ##              ^^^^^^ works on some lines, not on others, don't know why :/
+            cont = '\n'.join(cont)
+
+            output += render_text(highlight_code(cont, lang))
+
             return output + '\033[0m'
         
         case 'html_inline':
@@ -218,10 +272,10 @@ def render(token: Token):
             return token.content
         
         case _:
-            return token.content
+            return render_text(token.content)
 
 
-    return token.content
+    return render_text(token.content)
 
 def render_text(text):
     if not text: return ''
@@ -231,4 +285,4 @@ def render_text(text):
     if _heading_scale:
         return f'\033]66;{_heading_scale};{text}\a'
     else:
-        return text + '\n'
+        return text

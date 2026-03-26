@@ -23,6 +23,8 @@ def render_md(
     else:
         data = path.read_text()
 
+    data = render.process_markdown(data)
+
     tokens = render.md.parse(data)
 
     if render.is_kitty: asyncio.run(render.preload_images(tokens))
@@ -32,7 +34,7 @@ def render_md(
     for t in tokens:
         if debug:
             print(f"{t.content[:5].ljust(5)} | {t.type}")
-            if t.children: [print(c.type) for c in t.children]
+            if t.children: [print(f" - {c.content[:5].ljust(5)} | {c.type}") for c in t.children]
         else: buf.append(render.render(t))
 
     sys.stdout.write(''.join(buf))

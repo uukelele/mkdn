@@ -10,8 +10,13 @@ dependencies = [
     "markdown-it-py>=4.0.0",
     "mdit-py-plugins>=0.5.0",
     "pillow>=12.1.1",
+    "pygments>=2.19.2",
+    "texicode @ git+https://github.com/uukelele/TeXicode.git",
     "typer>=0.24.1",
 ]
 
 [project.scripts]
 mkdn = "mkdn.main:app"
+
+[tool.uv.sources]
+texicode = { git = "https://github.com/uukelele/TeXicode.git" }
