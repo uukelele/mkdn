@@ -25,7 +25,7 @@ def render_md(
 
     tokens = render.md.parse(data)
 
-    asyncio.run(render.preload_images(tokens))
+    if render.is_kitty: asyncio.run(render.preload_images(tokens))
 
     buf = []
 

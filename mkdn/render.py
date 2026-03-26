@@ -161,6 +161,7 @@ def render(token: Token):
             return render_text(token.content)
         
         case 'image':
+            if not is_kitty: return '[You need kitty to render images.]'
             path = token.attrGet('src')
             return _image_cache.get(path, f"[Image missing: {path}]\n")
 
