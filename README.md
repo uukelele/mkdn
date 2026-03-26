@@ -21,3 +21,9 @@ $ mkdn README.md
 $ cat README.md | mkdn
 $ curl 'https://raw.githubusercontent.com/uukelele/mkdn/refs/heads/main/README.md' -s | mkdn
 ```
+
+## Screenshots
+
+![text](https://raw.githubusercontent.com/uukelele/mkdn/refs/heads/main/.github/assets/image.png)
+
+![lists](https://raw.githubusercontent.com/uukelele/mkdn/refs/heads/main/.github/assets/lists.png)
